@@ -1,0 +1,154 @@
+{
+  "id": "sql-injection",
+  "title": "SQL Injection",
+  "owasp_category": "A03:2021 - Injection",
+  "cwe": ["CWE-89"],
+  "difficulty": "Beginner",
+  "estimated_time": "25 min",
+  "description": "SQL Injection occurs when untrusted user input is embedded directly into a database query, allowing attackers to manipulate query logic, extract sensitive data, bypass authentication, or destroy data.",
+  "learning_objectives": [
+    "Explain how SQL injection vulnerabilities arise from string concatenation",
+    "Identify vulnerable query patterns in Python, JavaScript, and PHP",
+    "Apply parameterised queries and prepared statements to prevent injection",
+    "Implement input validation as a defence-in-depth measure",
+    "Recognise SQL injection patterns in AI-generated code"
+  ],
+  "sections": [
+    {
+      "id": "how-it-works",
+      "title": "How SQL Injection Works",
+      "type": "explanation",
+      "content": "SQL injection exploits the way applications construct database queries. When user input is concatenated directly into a query string, an attacker can supply input that changes the structure of the SQL statement itself — not just its data values. The database interpreter cannot distinguish between the developer's intended query logic and the attacker's injected commands, because by the time the query reaches the database it looks like legitimate SQL.",
+      "key_concept": "The root cause is always the same: user-controlled data is treated as SQL code rather than as data."
+    },
+    {
+      "id": "attack-scenario",
+      "title": "Real-World Attack Scenario",
+      "type": "scenario",
+      "scenario": "A university student portal has a login form. The developer built the authentication query by joining the username and password directly into a SQL string. An attacker enters the following as their username: admin'-- and leaves the password field empty. The injected single quote closes the string, and -- comments out the rest of the query — including the password check — granting access to the admin account without knowing the password.",
+      "impact": [
+        "Authentication bypass — log in as any user without a password",
+        "Data extraction — dump the entire users table including password hashes",
+        "Data destruction — DROP TABLE or DELETE all records",
+        "Privilege escalation — execute stored procedures with elevated rights"
+      ]
+    },
+    {
+      "id": "vulnerable-code",
+      "title": "Vulnerable Code Examples",
+      "type": "code_comparison",
+      "examples": [
+        {
+          "language": "python",
+          "label": "Python — Vulnerable",
+          "vulnerable": {
+            "code": "# VULNERABLE: string concatenation\ndef get_user(username):\n    query = \"SELECT * FROM users WHERE username='\" + username + \"'\"\n    cursor.execute(query)\n    return cursor.fetchone()\n\n# Attacker input: ' OR '1'='1\n# Resulting query: SELECT * FROM users WHERE username='' OR '1'='1'\n# This returns ALL users in the table",
+            "problem": "User input is concatenated directly into the query string. The database cannot distinguish between the query structure and the data."
+          },
+          "secure": {
+            "code": "# SECURE: parameterised query\ndef get_user(username):\n    query = \"SELECT * FROM users WHERE username = ?\"\n    cursor.execute(query, (username,))\n    return cursor.fetchone()\n\n# Attacker input: ' OR '1'='1\n# The driver escapes the input — it is treated as a literal string\n# Query finds no user with that exact username",
+            "fix": "The ? placeholder tells the database driver to treat the value as pure data, never as SQL syntax. Injection is structurally impossible."
+          }
+        },
+        {
+          "language": "javascript",
+          "label": "JavaScript (Node.js) — Vulnerable",
+          "vulnerable": {
+            "code": "// VULNERABLE: template literal in query\napp.get('/user', async (req, res) => {\n  const id = req.query.id;\n  const result = await db.query(\n    `SELECT * FROM users WHERE id = ${id}`\n  );\n  res.json(result.rows);\n});\n\n// Attacker: ?id=1 OR 1=1 UNION SELECT password,null FROM users--",
+            "problem": "Template literals interpolate variables directly into the SQL string, identical in risk to string concatenation."
+          },
+          "secure": {
+            "code": "// SECURE: parameterised query with pg library\napp.get('/user', async (req, res) => {\n  const id = req.query.id;\n  const result = await db.query(\n    'SELECT * FROM users WHERE id = $1',\n    [id]\n  );\n  res.json(result.rows);\n});\n\n// The $1 placeholder ensures id is always treated as data",
+            "fix": "Use positional parameters ($1, $2...) passed as a separate array. The database driver handles all escaping."
+          }
+        }
+      ]
+    },
+    {
+      "id": "secure-by-design",
+      "title": "Security-by-Design Principles",
+      "type": "principles",
+      "content": "Preventing SQL injection is not just about fixing vulnerable lines — it requires adopting patterns at the design stage that make injection structurally impossible.",
+      "principles": [
+        {
+          "title": "Use an ORM",
+          "detail": "Object-Relational Mappers like SQLAlchemy (Python) or Sequelize (Node.js) use parameterised queries internally. Unless you write raw SQL, you are protected by default.",
+          "example": "# SQLAlchemy — injection impossible by design\nuser = db.session.query(User).filter_by(username=username).first()"
+        },
+        {
+          "title": "Principle of Least Privilege",
+          "detail": "The database account used by your application should only have the permissions it needs. A read-only reporting feature should use a read-only database user — even if injection occurs, the attacker cannot write or delete.",
+          "example": "-- Database setup: grant only what is needed\nGRANT SELECT ON users TO app_readonly_user;"
+        },
+        {
+          "title": "Input Validation",
+          "detail": "Validate that input conforms to expected format before using it. An ID field should only contain digits. A username should match a known pattern. This is defence-in-depth — not a substitute for parameterised queries.",
+          "example": "import re\ndef validate_username(username):\n    if not re.match(r'^[a-zA-Z0-9_]{3,30}$', username):\n        raise ValueError('Invalid username format')\n    return username"
+        }
+      ]
+    },
+    {
+      "id": "prevention-checklist",
+      "title": "Prevention Checklist",
+      "type": "checklist",
+      "items": [
+        { "id": "p1", "text": "Use parameterised queries or prepared statements for all database interactions" },
+        { "id": "p2", "text": "Use an ORM where appropriate — it uses safe queries by default" },
+        { "id": "p3", "text": "Apply the principle of least privilege to all database accounts" },
+        { "id": "p4", "text": "Validate and sanitise all user input before use" },
+        { "id": "p5", "text": "Never expose raw database error messages to end users" },
+        { "id": "p6", "text": "Review all raw SQL queries in code — especially those built with string operations" }
+      ]
+    },
+    {
+      "id": "ai-code-warning",
+      "title": "Watch Out in AI-Generated Code",
+      "type": "ai_warning",
+      "content": "AI coding assistants frequently generate SQL queries using string concatenation or f-strings, particularly when the prompt does not specify a security requirement. When reviewing AI-generated database code, always check whether query variables are parameterised or interpolated.",
+      "red_flags": [
+        "f\"SELECT ... WHERE id={variable}\" — f-string interpolation",
+        "\"SELECT ... WHERE id=\" + str(variable) — string concatenation",
+        "cursor.execute(query) with no second argument — no parameterisation",
+        "Template literals: `SELECT ... WHERE id=${variable}` in JavaScript"
+      ]
+    }
+  ],
+  "quiz": [
+    {
+      "id": "q1",
+      "question": "Which of the following query constructions is vulnerable to SQL injection?",
+      "options": [
+        "cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))",
+        "cursor.execute('SELECT * FROM users WHERE id = ' + user_id)",
+        "db.query('SELECT * FROM users WHERE id = $1', [user_id])",
+        "User.objects.filter(id=user_id)"
+      ],
+      "correct": 1,
+      "explanation": "Option B concatenates user_id directly into the query string, making it vulnerable to injection. Options A and C use parameterised placeholders. Option D uses an ORM which parameterises by default."
+    },
+    {
+      "id": "q2",
+      "question": "What is the primary reason parameterised queries prevent SQL injection?",
+      "options": [
+        "They encrypt the query before sending it to the database",
+        "They validate that input contains no special characters",
+        "They ensure user input is always treated as data, never as SQL syntax",
+        "They limit query execution time"
+      ],
+      "correct": 2,
+      "explanation": "Parameterised queries send the query structure and the data values separately to the database. The database engine interprets the structure first, then substitutes the values as pure data — so injection characters in the input cannot alter the query logic."
+    },
+    {
+      "id": "q3",
+      "question": "An attacker enters the username: admin'-- in a login form. What is the likely effect?",
+      "options": [
+        "The query will throw a syntax error and the login will fail safely",
+        "The single quote will be ignored by the database",
+        "The -- will comment out the password check, bypassing authentication",
+        "The database will reject queries containing special characters"
+      ],
+      "correct": 2,
+      "explanation": "If the application builds the query by concatenation, the injected ' closes the string and -- comments out the rest of the SQL — including the password validation. The attacker logs in without providing a valid password."
+    }
+  ]
+}

@@ -1,0 +1,155 @@
+{
+  "id": "path-traversal",
+  "title": "Path Traversal",
+  "owasp_category": "A01:2021 - Broken Access Control",
+  "cwe": ["CWE-22", "CWE-23"],
+  "difficulty": "Intermediate",
+  "estimated_time": "25 min",
+  "description": "Path traversal vulnerabilities allow attackers to navigate outside the intended directory using sequences like ../ in file path inputs, potentially accessing sensitive system files, configuration files, or private user data.",
+  "learning_objectives": [
+    "Explain how ../ sequences enable directory traversal",
+    "Identify vulnerable file-handling patterns in web applications",
+    "Apply path resolution and base directory validation",
+    "Use allowlisting to restrict accessible files",
+    "Recognise path traversal risks in AI-generated file-serving code"
+  ],
+  "sections": [
+    {
+      "id": "how-it-works",
+      "title": "How Path Traversal Works",
+      "type": "explanation",
+      "content": "When an application accepts a filename or path as user input and uses it to access the file system, an attacker can supply path sequences like ../ (go up one directory) to navigate outside the intended directory. The operating system resolves these sequences as part of normal path handling — the application has no way to detect the traversal unless it explicitly validates the resolved path.",
+      "key_concept": "The ../ sequence is not a special attack string — it is valid file system syntax that the OS resolves normally. The vulnerability is allowing user input to control where on the file system the application reads."
+    },
+    {
+      "id": "attack-scenario",
+      "title": "Real-World Attack Scenario",
+      "type": "scenario",
+      "scenario": "A document management system allows authenticated users to download files by passing a filename in the URL: /download?file=report.pdf. The application joins this value with an upload directory path. An attacker crafts the request: /download?file=../../../../etc/passwd. The OS resolves this to the system password file path, and the application serves its contents — exposing every system user account.",
+      "impact": [
+        "Read sensitive system files: /etc/passwd, /etc/shadow, SSH private keys",
+        "Read application configuration files containing database credentials or API keys",
+        "Read other users' private files if the application stores them on the same server",
+        "In write-vulnerable scenarios: overwrite configuration files or place malicious scripts"
+      ]
+    },
+    {
+      "id": "vulnerable-code",
+      "title": "Vulnerable vs Secure Code",
+      "type": "code_comparison",
+      "examples": [
+        {
+          "language": "python",
+          "label": "Python (Flask) — Vulnerable vs Secure",
+          "vulnerable": {
+            "code": "# VULNERABLE: joins user input directly to base path\nimport os\nfrom flask import send_file, request, abort\n\nUPLOAD_DIR = '/var/app/uploads'\n\n@app.route('/download')\ndef download():\n    filename = request.args.get('file')\n    # os.path.join does NOT prevent traversal\n    filepath = os.path.join(UPLOAD_DIR, filename)\n    return send_file(filepath)\n\n# ?file=../../../../etc/passwd\n# filepath = '/var/app/uploads/../../../../etc/passwd'\n# Resolves to: '/etc/passwd'",
+            "problem": "os.path.join does not resolve or validate traversal sequences. The resulting path can point anywhere on the file system."
+          },
+          "secure": {
+            "code": "# SECURE: resolve path and validate it stays within base directory\nimport os\nfrom flask import send_file, request, abort\n\nUPLOAD_DIR = os.path.realpath('/var/app/uploads')\n\n@app.route('/download')\ndef download():\n    filename = request.args.get('file', '')\n\n    # Reject filenames with suspicious patterns early\n    if '..' in filename or filename.startswith('/'):\n        abort(400)\n\n    # Resolve the absolute path — this collapses all ../ sequences\n    filepath = os.path.realpath(os.path.join(UPLOAD_DIR, filename))\n\n    # Enforce that the resolved path is inside the upload directory\n    if not filepath.startswith(UPLOAD_DIR + os.sep):\n        abort(403)\n\n    return send_file(filepath)",
+            "fix": "os.path.realpath() resolves all ../ sequences and symlinks to an absolute canonical path. The startswith check confirms the resolved path is still inside the intended directory — any traversal attempt lands outside and is rejected."
+          }
+        },
+        {
+          "language": "javascript",
+          "label": "Node.js — Vulnerable vs Secure",
+          "vulnerable": {
+            "code": "// VULNERABLE: path.join without validation\nconst path = require('path');\nconst fs = require('fs');\n\napp.get('/file', (req, res) => {\n  const filename = req.query.name;\n  const filepath = path.join(__dirname, 'uploads', filename);\n  res.sendFile(filepath);\n});\n\n// ?name=../../package.json reveals server config\n// ?name=../../../etc/passwd on Linux",
+            "problem": "path.join normalises the path but does not prevent traversal above the base directory when the input contains ../ sequences."
+          },
+          "secure": {
+            "code": "// SECURE: resolve and validate within base directory\nconst path = require('path');\nconst fs = require('fs');\n\nconst UPLOAD_DIR = path.resolve(__dirname, 'uploads');\n\napp.get('/file', (req, res) => {\n  const filename = req.query.name || '';\n  \n  // Resolve to absolute path\n  const filepath = path.resolve(UPLOAD_DIR, filename);\n  \n  // Check the resolved path starts with the upload directory\n  if (!filepath.startsWith(UPLOAD_DIR + path.sep)) {\n    return res.status(403).send('Access denied');\n  }\n\n  res.sendFile(filepath);\n});",
+            "fix": "path.resolve() produces an absolute canonical path. The startsWith check ensures the file being served is inside the uploads directory, regardless of how many ../ sequences were in the input."
+          }
+        }
+      ]
+    },
+    {
+      "id": "secure-by-design",
+      "title": "Security-by-Design Principles",
+      "type": "principles",
+      "content": "The safest approach is to never allow user input to directly control a file system path. Where file access is required, use indirect references.",
+      "principles": [
+        {
+          "title": "Use Indirect File References",
+          "detail": "Instead of accepting a filename from the user, accept an ID that maps to a filename in your database. The user never touches the actual file path.",
+          "example": "# User sends: /download?id=42\n# Application looks up file path in database\n@app.route('/download')\ndef download():\n    file_id = request.args.get('id')\n    record = db.get_file_record(file_id, owner=current_user.id)\n    if not record:\n        abort(404)\n    return send_file(record.filepath)  # Path from trusted DB, not user input"
+        },
+        {
+          "title": "Allowlist Permitted Files or Extensions",
+          "detail": "If the filename must come from user input, validate it against an allowlist of permitted names or file extensions before constructing the path.",
+          "example": "ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.xlsx'}\n\ndef is_safe_filename(filename):\n    ext = os.path.splitext(filename)[1].lower()\n    # Check extension and that no path separators are present\n    return ext in ALLOWED_EXTENSIONS and os.sep not in filename"
+        },
+        {
+          "title": "Apply Least Privilege to File System Access",
+          "detail": "Run the web application process with a user account that only has read access to the directories it needs. Even if path traversal occurs, the process cannot read files outside its permitted scope.",
+          "example": "# Run Flask as a restricted user (in deployment)\n# The app user should only have read access to /var/app/uploads\n# Not to /etc, /home, or other sensitive directories"
+        }
+      ]
+    },
+    {
+      "id": "prevention-checklist",
+      "title": "Prevention Checklist",
+      "type": "checklist",
+      "items": [
+        { "id": "p1", "text": "Never use user-supplied input directly in file system path construction" },
+        { "id": "p2", "text": "Use os.path.realpath() or path.resolve() to canonicalise paths before use" },
+        { "id": "p3", "text": "Always validate that the resolved path begins with the intended base directory" },
+        { "id": "p4", "text": "Prefer indirect references (database IDs) over direct filenames where possible" },
+        { "id": "p5", "text": "Allowlist permitted file extensions and reject paths containing separators" },
+        { "id": "p6", "text": "Run the application with the minimum file system permissions required" }
+      ]
+    },
+    {
+      "id": "ai-code-warning",
+      "title": "Watch Out in AI-Generated Code",
+      "type": "ai_warning",
+      "content": "AI assistants frequently generate file download or serving endpoints using os.path.join() or path.join() with user input, without adding path validation. This is one of the most consistently generated path traversal vulnerabilities.",
+      "red_flags": [
+        "os.path.join(BASE_DIR, user_input) with no subsequent validation",
+        "send_file(request.args.get('file')) — user input passed directly to file serving",
+        "open(filename, 'r') where filename comes from request parameters",
+        "No check that the resolved path starts with the intended base directory",
+        "Using str.replace('../', '') as sanitisation — can be bypassed with ....// patterns"
+      ]
+    }
+  ],
+  "quiz": [
+    {
+      "id": "q1",
+      "question": "An application builds a file path as: os.path.join('/uploads', request.args.get('file')). What input would allow an attacker to read /etc/passwd?",
+      "options": [
+        "/etc/passwd",
+        "..%2F..%2F..%2Fetc%2Fpasswd",
+        "../../../../etc/passwd",
+        "Both B and C depending on URL encoding handling"
+      ],
+      "correct": 3,
+      "explanation": "Both ../../../etc/passwd and its URL-encoded equivalent ..%2F..%2F..%2Fetc%2Fpasswd may work depending on whether the application decodes the input before or after path construction. Robust validation must be applied after full path resolution."
+    },
+    {
+      "id": "q2",
+      "question": "Which function correctly defends against path traversal by canonicalising a file path?",
+      "options": [
+        "os.path.join(base, filename)",
+        "filename.replace('../', '')",
+        "os.path.realpath(os.path.join(base, filename))",
+        "os.path.basename(filename)"
+      ],
+      "correct": 2,
+      "explanation": "os.path.realpath() resolves all ../ sequences and symlinks to produce the absolute canonical path. os.path.basename() only extracts the filename component — it doesn't prevent traversal if the input contains path separators within the name. String replacement can be bypassed with patterns like ....//."
+    },
+    {
+      "id": "q3",
+      "question": "What is the most robust architectural approach to preventing path traversal in a file download feature?",
+      "options": [
+        "Validate that the filename contains no special characters",
+        "Use indirect file references — accept a database ID and look up the path server-side",
+        "Convert all filenames to lowercase before use",
+        "Restrict file access to files smaller than 10MB"
+      ],
+      "correct": 1,
+      "explanation": "Using indirect references means the user never provides a file path — they provide an ID, and the server looks up the trusted path in a database. This eliminates the attack surface entirely, as user input never influences which file system path is accessed."
+    }
+  ]
+}

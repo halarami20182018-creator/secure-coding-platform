@@ -1,0 +1,157 @@
+{
+  "id": "buffer-overflow",
+  "title": "Buffer Overflow",
+  "owasp_category": "A03:2021 - Injection",
+  "cwe": ["CWE-120", "CWE-121", "CWE-122"],
+  "difficulty": "Advanced",
+  "estimated_time": "35 min",
+  "description": "Buffer overflows occur when a program writes more data into a buffer than it can hold, corrupting adjacent memory. This can crash programs, corrupt data, or — in the most severe cases — allow attackers to execute arbitrary code.",
+  "learning_objectives": [
+    "Explain how stack and heap buffer overflows corrupt memory",
+    "Identify unsafe C/C++ functions that enable overflows",
+    "Apply bounds-checked alternatives and safe string handling",
+    "Understand modern compiler and OS mitigations: stack canaries, ASLR, DEP/NX",
+    "Recognise unsafe buffer patterns in AI-generated C/C++ code"
+  ],
+  "sections": [
+    {
+      "id": "how-it-works",
+      "title": "How Buffer Overflow Works",
+      "type": "explanation",
+      "content": "A buffer is a contiguous region of memory allocated to hold a fixed amount of data. When a program copies more data into a buffer than it was allocated to hold, the excess bytes overwrite adjacent memory. On the stack, this can overwrite local variables, saved frame pointers, and critically — the return address that tells the CPU where to resume execution when the function returns. By carefully crafting the overflow payload, an attacker can redirect execution to arbitrary code.",
+      "key_concept": "Buffer overflows are a consequence of C and C++ not performing automatic bounds checking. The programmer is entirely responsible for ensuring writes do not exceed the allocated buffer size."
+    },
+    {
+      "id": "attack-scenario",
+      "title": "Real-World Attack Scenario",
+      "type": "scenario",
+      "scenario": "A network service written in C reads a client's username into a 64-byte stack buffer using gets(). An attacker connects and sends 200 bytes: 64 bytes to fill the buffer, then carefully crafted bytes to overwrite the stack frame's return address with the address of shellcode embedded in the payload. When the function returns, the CPU jumps to the shellcode and executes it with the service's privileges — giving the attacker a remote shell.",
+      "impact": [
+        "Arbitrary code execution — run any command with the process's privileges",
+        "Privilege escalation — if the process runs as root or SYSTEM, full system compromise",
+        "Denial of service — crash the application or the entire system",
+        "Data corruption — overwrite adjacent variables silently with incorrect values"
+      ]
+    },
+    {
+      "id": "vulnerable-code",
+      "title": "Vulnerable vs Secure Code",
+      "type": "code_comparison",
+      "examples": [
+        {
+          "language": "c",
+          "label": "C — Stack Buffer Overflow",
+          "vulnerable": {
+            "code": "/* VULNERABLE: gets() has no length limit — removed from C11 standard */\n#include <stdio.h>\n\nvoid process_input(void) {\n    char buffer[64];     /* 64 bytes on the stack */\n    gets(buffer);        /* reads until newline — no length check */\n    printf(\"Input: %s\\n\", buffer);\n}\n\n/* Input of 100 bytes:\n   - Bytes 1-64: fill the buffer\n   - Bytes 65-72: overwrite saved frame pointer\n   - Bytes 73-80: overwrite return address\n   - Remaining: shellcode or ROP gadget addresses */",
+            "problem": "gets() reads input until a newline or EOF with absolutely no length restriction. The C11 standard removed it precisely because it is impossible to use safely."
+          },
+          "secure": {
+            "code": "/* SECURE: fgets() with explicit size limit */\n#include <stdio.h>\n#include <string.h>\n\nvoid process_input(void) {\n    char buffer[64];\n    \n    /* fgets(dest, max_chars_including_null, stream) */\n    /* Will read at most sizeof(buffer)-1 characters */\n    if (fgets(buffer, sizeof(buffer), stdin) == NULL) {\n        /* Handle EOF or error */\n        return;\n    }\n    \n    /* Remove trailing newline if present */\n    buffer[strcspn(buffer, \"\\n\")] = '\\0';\n    \n    printf(\"Input: %s\\n\", buffer);\n}\n\n/* Even with 1000 bytes of input, fgets stops at 63 chars */",
+            "fix": "fgets() accepts a maximum length argument and never writes beyond it. sizeof(buffer) ensures the limit matches the actual allocation — even if the buffer size changes later."
+          }
+        },
+        {
+          "language": "c",
+          "label": "C — Unsafe String Copy",
+          "vulnerable": {
+            "code": "/* VULNERABLE: strcpy has no length check */\n#include <string.h>\n\nvoid copy_name(const char *user_input) {\n    char name[32];\n    strcpy(name, user_input);  /* copies until null byte — no limit */\n    use_name(name);\n}\n\n/* Also vulnerable:\n   strcat(dest, src)      — no length check on append\n   sprintf(buf, fmt, ...) — no buffer size limit\n   scanf(\"%s\", buf)       — reads until whitespace, no limit */",
+            "problem": "strcpy copies bytes from source to destination until a null terminator — if source is longer than the destination buffer, adjacent memory is overwritten."
+          },
+          "secure": {
+            "code": "/* SECURE: use length-limited alternatives */\n#include <string.h>\n\nvoid copy_name(const char *user_input) {\n    char name[32];\n    \n    /* strncpy copies at most n bytes */\n    strncpy(name, user_input, sizeof(name) - 1);\n    name[sizeof(name) - 1] = '\\0';  /* ensure null termination */\n    \n    use_name(name);\n}\n\n/* Modern alternatives (Annex K / MSVC):\n   strcpy_s(dest, dest_size, src)     — safe copy\n   strncat_s(dest, dest_size, src, n) — safe append\n   snprintf(buf, sizeof(buf), fmt, ...) — safe format */",
+            "fix": "strncpy limits the number of bytes copied. The explicit null termination ensures the buffer is always properly terminated. snprintf with sizeof(buf) is the safe replacement for sprintf."
+          }
+        }
+      ]
+    },
+    {
+      "id": "secure-by-design",
+      "title": "Security-by-Design Principles",
+      "type": "principles",
+      "content": "The most effective protection against buffer overflows is to use memory-safe languages or safe abstractions. When C/C++ is required, combine safe coding practices with compiler and OS mitigations.",
+      "principles": [
+        {
+          "title": "Use Memory-Safe Languages Where Possible",
+          "detail": "Languages like Rust, Python, Go, and Java perform automatic bounds checking on array and buffer accesses. Buffer overflows are structurally impossible in these languages — the runtime raises an exception or the compiler prevents the unsafe operation.",
+          "example": "// Rust: bounds checking is automatic\nfn process_input(data: &[u8]) {\n    let buffer = &data[..64]; // panics if data.len() < 64\n    // Cannot overflow — slice bounds are enforced\n}"
+        },
+        {
+          "title": "Enable Compiler Protections",
+          "detail": "Modern compilers support stack canaries (detect overwrites), Address Space Layout Randomisation (randomise memory layout), and Data Execution Prevention (prevent code execution in data regions). These don't prevent overflows but make exploitation far harder.",
+          "example": "# GCC compilation flags for security\ngcc -Wall -Wextra           # Enable warnings\n    -fstack-protector-strong # Stack canaries\n    -D_FORTIFY_SOURCE=2      # Runtime bounds checking\n    -pie -fPIE               # Position independent (for ASLR)\n    -o program source.c"
+        },
+        {
+          "title": "Use Static Analysis Tools",
+          "detail": "Tools like Cppcheck, Clang Static Analyser, and Coverity can detect unsafe function usage and potential out-of-bounds writes during development, before code reaches production.",
+          "example": "# Run Cppcheck on C source\ncppcheck --enable=all --std=c11 source.c\n\n# Clang static analyser\nscan-build gcc -o program source.c"
+        }
+      ]
+    },
+    {
+      "id": "prevention-checklist",
+      "title": "Prevention Checklist",
+      "type": "checklist",
+      "items": [
+        { "id": "p1", "text": "Never use gets(), strcpy(), strcat(), or sprintf() in new code" },
+        { "id": "p2", "text": "Use fgets(), strncpy(), strncat(), and snprintf() with explicit size limits" },
+        { "id": "p3", "text": "Always ensure buffers are null-terminated after bounded copy operations" },
+        { "id": "p4", "text": "Enable compiler protections: -fstack-protector-strong, -D_FORTIFY_SOURCE=2" },
+        { "id": "p5", "text": "Use memory-safe languages (Rust, Go, Python) for new projects when possible" },
+        { "id": "p6", "text": "Run static analysis tools during development to catch unsafe patterns early" },
+        { "id": "p7", "text": "Validate all input lengths before copying into fixed-size buffers" }
+      ]
+    },
+    {
+      "id": "ai-code-warning",
+      "title": "Watch Out in AI-Generated Code",
+      "type": "ai_warning",
+      "content": "AI assistants sometimes generate C code using legacy unsafe functions, especially gets() and strcpy(), particularly when generating code from older training examples. Any AI-generated C code involving user input should be reviewed for unsafe string and buffer handling functions.",
+      "red_flags": [
+        "gets(buffer) — always unsafe, no bounds checking",
+        "strcpy(dest, src) — no length limit on copy",
+        "strcat(dest, src) — no check on destination remaining space",
+        "sprintf(buf, format, ...) — use snprintf instead",
+        "scanf(\"%s\", buf) — use scanf(\"%63s\", buf) with explicit width",
+        "char buf[N]; memcpy(buf, src, strlen(src)) — length from source, not destination"
+      ]
+    }
+  ],
+  "quiz": [
+    {
+      "id": "q1",
+      "question": "Why was gets() removed from the C11 standard?",
+      "options": [
+        "It was too slow for modern hardware",
+        "It cannot be used safely — it has no length parameter and always risks buffer overflow",
+        "It was replaced by a faster equivalent in the standard library",
+        "It only works on Unix systems"
+      ],
+      "correct": 1,
+      "explanation": "gets() reads from stdin until it encounters a newline or EOF with no limit on how many bytes it writes. There is no way to make it safe — if the input is longer than the buffer, memory will be overwritten. The C11 standard deprecated and then removed it."
+    },
+    {
+      "id": "q2",
+      "question": "What does a stack canary protect against?",
+      "options": [
+        "Heap buffer overflows",
+        "Stack buffer overflows that overwrite the return address",
+        "Integer overflow vulnerabilities",
+        "Format string attacks"
+      ],
+      "correct": 1,
+      "explanation": "A stack canary is a random value placed on the stack between local variables and the saved return address. Before the function returns, the compiler checks that the canary value is unchanged. A buffer overflow that overwrites the return address must pass through the canary — if it is altered, the program aborts rather than returning to attacker-controlled code."
+    },
+    {
+      "id": "q3",
+      "question": "Which is the correct secure replacement for: strcpy(name, user_input)?",
+      "options": [
+        "memcpy(name, user_input, strlen(user_input))",
+        "strncpy(name, user_input, sizeof(name)); (without null termination)",
+        "strncpy(name, user_input, sizeof(name) - 1); name[sizeof(name)-1] = '\\0';",
+        "gets(name)"
+      ],
+      "correct": 2,
+      "explanation": "strncpy with sizeof(name)-1 limits the copy to one less than the buffer size, leaving room for the null terminator which is then explicitly written. Using sizeof(name) without the -1 risks writing the null terminator one byte past the end. memcpy with strlen uses the source length, not the destination length — still vulnerable."
+    }
+  ]
+}

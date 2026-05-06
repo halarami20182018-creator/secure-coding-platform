@@ -1,0 +1,161 @@
+/* ===========================
+   Global Styles
+   =========================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --color-primary:       #1a365d;
+  --color-primary-light: #2c5282;
+  --color-accent:        #3182ce;
+  --color-accent-light:  #ebf8ff;
+  --color-success:       #276749;
+  --color-success-bg:    #f0fff4;
+  --color-warning:       #744210;
+  --color-warning-bg:    #fffbeb;
+  --color-danger:        #9b2335;
+  --color-danger-bg:     #fff5f5;
+  --color-text:          #2d3748;
+  --color-text-muted:    #718096;
+  --color-border:        #e2e8f0;
+  --color-bg:            #f7fafc;
+  --color-white:         #ffffff;
+  --radius:              8px;
+  --shadow:              0 2px 8px rgba(0,0,0,0.08);
+  --shadow-md:           0 4px 16px rgba(0,0,0,0.12);
+  --font:                'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  font-family: var(--font);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.6;
+  font-size: 16px;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-content {
+  flex: 1;
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.page {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+h1 { font-size: 2rem;   font-weight: 700; color: var(--color-primary);       margin-bottom: 0.5rem; }
+h2 { font-size: 1.5rem; font-weight: 600; color: var(--color-primary-light); margin-bottom: 0.5rem; }
+h3 { font-size: 1.2rem; font-weight: 600; color: var(--color-text);          margin-bottom: 0.4rem; }
+
+p  { margin-bottom: 1rem; color: var(--color-text); }
+
+a  { color: var(--color-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1.2rem;
+  border-radius: var(--radius);
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+.btn:active { transform: scale(0.98); }
+
+.btn-primary {
+  background: var(--color-accent);
+  color: white;
+}
+.btn-primary:hover { background: var(--color-primary-light); }
+
+.btn-outline {
+  background: transparent;
+  color: var(--color-accent);
+  border: 1.5px solid var(--color-accent);
+}
+.btn-outline:hover { background: var(--color-accent-light); }
+
+.btn-success {
+  background: var(--color-success);
+  color: white;
+}
+
+/* Cards */
+.card {
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.badge-danger  { background: var(--color-danger-bg);  color: var(--color-danger);  }
+.badge-warning { background: var(--color-warning-bg); color: var(--color-warning); }
+.badge-success { background: var(--color-success-bg); color: var(--color-success); }
+.badge-info    { background: var(--color-accent-light); color: var(--color-accent); }
+
+/* Code blocks */
+pre, code {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 0.9rem;
+}
+pre {
+  background: #1e2a3a;
+  color: #e2e8f0;
+  padding: 1.2rem;
+  border-radius: var(--radius);
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+/* Utility */
+.text-muted  { color: var(--color-text-muted); }
+.text-center { text-align: center; }
+.mt-1 { margin-top: 0.5rem; }
+.mt-2 { margin-top: 1rem;   }
+.mt-3 { margin-top: 1.5rem; }
+.mb-1 { margin-bottom: 0.5rem; }
+.mb-2 { margin-bottom: 1rem;   }
+.mb-3 { margin-bottom: 1.5rem; }
+
+/* Grid helpers */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr;     gap: 1.5rem; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
+
+@media (max-width: 768px) {
+  .main-content { padding: 1rem; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  h1 { font-size: 1.6rem; }
+}

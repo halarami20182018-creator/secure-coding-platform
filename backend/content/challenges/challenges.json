@@ -1,0 +1,92 @@
+[
+  {
+    "id": "ch1",
+    "module_id": "sql-injection",
+    "title": "Fix the Login Query",
+    "difficulty": "Beginner",
+    "estimated_time": "10 min",
+    "description": "The login function below is vulnerable to SQL injection. Rewrite it using a parameterised query to make it secure.",
+    "instructions": "Replace the string concatenation with a parameterised query. Use ? as the placeholder and pass values as a tuple to cursor.execute().",
+    "vulnerable_code": "def login(username, password):\n    query = \"SELECT * FROM users WHERE username='\" + username + \"' AND password='\" + password + \"'\"\n    cursor.execute(query)\n    return cursor.fetchone() is not None",
+    "language": "python",
+    "hints": [
+      "Use ? placeholders instead of string concatenation",
+      "Pass user values as a second argument tuple: cursor.execute(query, (username, password))",
+      "The query string itself should contain no variables — only ? placeholders"
+    ],
+    "solution_keywords": ["?", "cursor.execute", "(username", "password)"],
+    "explanation": "The original code concatenates username and password directly into the SQL string. An attacker can enter ' OR '1'='1 to bypass authentication. The secure version uses parameterised queries where the database driver handles escaping automatically — injection is structurally impossible."
+  },
+  {
+    "id": "ch2",
+    "module_id": "xss",
+    "title": "Sanitise the Comment Display",
+    "difficulty": "Beginner",
+    "estimated_time": "10 min",
+    "description": "This Flask route renders a user comment directly into HTML without escaping, making it vulnerable to XSS. Fix it using proper output escaping.",
+    "instructions": "Import escape from markupsafe and apply it to the comment variable before embedding it in the HTML response.",
+    "vulnerable_code": "from flask import request\n\n@app.route('/comment')\ndef show_comment():\n    comment = request.args.get('comment', '')\n    return f'<div class=\"comment\">{comment}</div>'",
+    "language": "python",
+    "hints": [
+      "Add: from markupsafe import escape at the top",
+      "Apply escape() to the comment variable before embedding it",
+      "escape() converts < > & \" to safe HTML entities"
+    ],
+    "solution_keywords": ["escape", "markupsafe", "escape(comment)"],
+    "explanation": "Without escaping, an attacker can inject <script>alert(1)</script> as a comment and the browser executes it. escape() converts dangerous characters to HTML entities so they display as visible text rather than executing as code."
+  },
+  {
+    "id": "ch3",
+    "module_id": "insecure-auth",
+    "title": "Upgrade the Password Storage",
+    "difficulty": "Intermediate",
+    "estimated_time": "15 min",
+    "description": "This registration function stores passwords using MD5 — a broken hashing algorithm. Rewrite it to use bcrypt with a cost factor of 12.",
+    "instructions": "Replace the MD5 hash with bcrypt. Import bcrypt, generate a salt with bcrypt.gensalt(rounds=12), and hash with bcrypt.hashpw().",
+    "vulnerable_code": "import hashlib\n\ndef register_user(username, password):\n    password_hash = hashlib.md5(password.encode()).hexdigest()\n    db.execute(\n        'INSERT INTO users (username, password_hash) VALUES (?, ?)',\n        (username, password_hash)\n    )",
+    "language": "python",
+    "hints": [
+      "Import bcrypt at the top of your file",
+      "Generate a salt: salt = bcrypt.gensalt(rounds=12)",
+      "Hash the password: bcrypt.hashpw(password.encode('utf-8'), salt)"
+    ],
+    "solution_keywords": ["bcrypt", "gensalt", "hashpw", "rounds=12"],
+    "explanation": "MD5 is fast — GPUs compute billions of MD5 hashes per second, making brute force trivial. bcrypt is intentionally slow with a configurable cost factor and automatically salts each hash to defeat rainbow table attacks."
+  },
+  {
+    "id": "ch4",
+    "module_id": "path-traversal",
+    "title": "Secure the File Download",
+    "difficulty": "Intermediate",
+    "estimated_time": "15 min",
+    "description": "This file download endpoint passes user input directly to the file system without validation, enabling path traversal attacks. Fix it to safely restrict access to the uploads directory.",
+    "instructions": "Use os.path.realpath() to resolve the full path, then verify it starts with the intended base directory before serving the file. Return abort(403) if the path escapes.",
+    "vulnerable_code": "import os\nfrom flask import send_file, request, abort\n\nUPLOAD_DIR = '/var/app/uploads'\n\n@app.route('/download')\ndef download():\n    filename = request.args.get('file', '')\n    filepath = os.path.join(UPLOAD_DIR, filename)\n    return send_file(filepath)",
+    "language": "python",
+    "hints": [
+      "Use os.path.realpath() to resolve all ../ sequences in the path",
+      "Check: if not filepath.startswith(UPLOAD_DIR + os.sep): abort(403)",
+      "Also validate UPLOAD_DIR itself with realpath() at the top"
+    ],
+    "solution_keywords": ["realpath", "startswith", "UPLOAD_DIR", "abort"],
+    "explanation": "os.path.join does not prevent traversal — ?file=../../../../etc/passwd produces a valid path to /etc/passwd. os.path.realpath() resolves all ../ sequences to absolute form. The startswith check then ensures the file must be inside the intended directory."
+  },
+  {
+    "id": "ch5",
+    "module_id": "buffer-overflow",
+    "title": "Replace the Unsafe Input Function",
+    "difficulty": "Advanced",
+    "estimated_time": "10 min",
+    "description": "This C function uses gets() to read user input into a fixed-size buffer — a classic buffer overflow vulnerability. Replace it with fgets() and add proper null termination.",
+    "instructions": "Replace gets(buffer) with fgets(buffer, sizeof(buffer), stdin). Then remove the trailing newline that fgets may include using strcspn.",
+    "vulnerable_code": "#include <stdio.h>\n#include <string.h>\n\nvoid read_username(void) {\n    char buffer[64];\n    printf(\"Enter username: \");\n    gets(buffer);\n    printf(\"Hello, %s!\\n\", buffer);\n}",
+    "language": "c",
+    "hints": [
+      "Replace gets(buffer) with fgets(buffer, sizeof(buffer), stdin)",
+      "fgets includes the newline — remove it with: buffer[strcspn(buffer, \"\\n\")] = '\\0'",
+      "sizeof(buffer) ensures the limit always matches the actual allocation"
+    ],
+    "solution_keywords": ["fgets", "sizeof", "strcspn"],
+    "explanation": "gets() reads with no length limit — input longer than 64 bytes overwrites adjacent stack memory and can lead to arbitrary code execution. fgets() limits the read to sizeof(buffer)-1 characters. The strcspn call removes the trailing newline that fgets includes."
+  }
+]
