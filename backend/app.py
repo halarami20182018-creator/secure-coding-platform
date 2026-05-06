@@ -13,7 +13,11 @@ from routes.auth       import auth_bp
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
-CORS(app, supports_credentials=True, origins=["http://localhost:3000"])
+CORS(app, supports_credentials=True, origins=[
+    "http://localhost:3000",
+    "https://*.vercel.app",
+    os.environ.get("FRONTEND_URL", ""),
+])
 
 app.register_blueprint(auth_bp,       url_prefix="/api/auth")
 app.register_blueprint(modules_bp,    url_prefix="/api/modules")
