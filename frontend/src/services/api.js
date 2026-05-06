@@ -1,7 +1,13 @@
 import axios from 'axios';
 
+// In production (Vercel) use the Render backend URL via env var
+// In development use the proxy in package.json (/api → localhost:5000)
+const baseURL = process.env.REACT_APP_API_URL
+  ? `${process.env.REACT_APP_API_URL}/api`
+  : '/api';
+
 const API = axios.create({
-  baseURL: '/api',
+  baseURL,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -22,21 +28,17 @@ export const getMe   = ()     => API.get('/auth/me');
 export const getModules = ()   => API.get('/modules/');
 export const getModule  = (id) => API.get(`/modules/${id}`);
 
-// ── Quiz ──────────────────────────────────────────────
-export const getQuiz    = (moduleId) => API.get(`/quiz/${moduleId}`);
-export const submitQuiz = (answers)  => API.post('/quiz/submit', answers);
-
 // ── Challenges ────────────────────────────────────────
-export const getChallenges   = ()     => API.get('/challenges/');
-export const getChallenge    = (id)   => API.get(`/challenges/${id}`);
-export const submitChallenge = (data) => API.post('/challenges/submit', data);
+export const getChallenges     = ()     => API.get('/challenges/');
+export const getChallenge      = (id)   => API.get(`/challenges/${id}`);
+export const submitChallenge   = (data) => API.post('/challenges/submit', data);
 
 // ── AI Review ─────────────────────────────────────────
 export const analyzeCode = (code, language) =>
   API.post('/ai-review/analyze', { code, language });
 
 // ── Progress ──────────────────────────────────────────
-export const getProgressSummary  = ()     => API.get('/progress/summary');
-export const recordSectionView   = (data) => API.post('/progress/section',   data);
-export const recordQuizResult    = (data) => API.post('/progress/quiz',       data);
-export const recordChallengeResult = (data) => API.post('/progress/challenge', data);
+export const getProgressSummary    = ()     => API.get('/progress/summary');
+export const recordSectionView     = (data) => API.post('/progress/section',   data);
+export const recordQuizResult      = (data) => API.post('/progress/quiz',       data);
+export const recordChallengeResult = (data) => API.post('/progress/challenge',  data);
